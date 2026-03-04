@@ -10,6 +10,14 @@ import type { Game } from "@/types/game";
 
 type Phase = "setup" | "playing";
 
+// Dérive l'URL WebSocket depuis NEXT_PUBLIC_API_URL
+const WS_BASE = (
+	process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000"
+).replace(/^http/, "ws");
+
+// Délai de reconnexion en ms (croissance exponentielle, max 10s)
+const RECONNECT_DELAYS = [500, 1000, 2000, 4000, 8000, 10000];
+
 export default function MorpionPage() {
 	const [phase, setPhase] = useState<Phase>("setup");
 	const [game, setGame] = useState<Game | null>(null);
@@ -18,36 +26,92 @@ export default function MorpionPage() {
 	const [inviteUrl, setInviteUrl] = useState<string | undefined>();
 	const [loading, setLoading] = useState(false);
 	const [error, setError] = useState<string | null>(null);
+	const [wsReady, setWsReady] = useState(false);
 
-	const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
+	const wsRef = useRef<WebSocket | null>(null);
+	const reconnectRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+	const attemptRef = useRef(0);
+	const gameIdRef = useRef<string | null>(null); // stable ref pour la reconnexion
 
-	// ── Polling PvP ───────────────────────────────────────────
-	const stopPolling = useCallback(() => {
-		if (pollingRef.current) {
-			clearInterval(pollingRef.current);
-			pollingRef.current = null;
+	// ── WebSocket ───────────────────────────────────────────────
+
+	const disconnectWS = useCallback(() => {
+		if (reconnectRef.current) {
+			clearTimeout(reconnectRef.current);
+			reconnectRef.current = null;
 		}
+		if (wsRef.current) {
+			wsRef.current.onclose = null; // évite la reconnexion automatique
+			wsRef.current.close();
+			wsRef.current = null;
+		}
+		setWsReady(false);
+		attemptRef.current = 0;
 	}, []);
 
-	const startPolling = useCallback(
+	const connectWS = useCallback(
 		(gameId: string) => {
-			stopPolling();
-			pollingRef.current = setInterval(async () => {
-				try {
-					const { game: updated } = await api.getState(gameId);
-					setGame(updated);
-					if (updated.status === "finished") stopPolling();
-				} catch {
-					// silently ignore polling errors
-				}
-			}, 1200);
+			disconnectWS();
+			gameIdRef.current = gameId;
+			attemptRef.current = 0;
+
+			const open = () => {
+				const ws = new WebSocket(`${WS_BASE}/ws/${gameId}`);
+				wsRef.current = ws;
+
+				ws.onopen = () => {
+					setWsReady(true);
+					attemptRef.current = 0;
+				};
+
+				ws.onmessage = (ev) => {
+					try {
+						const msg = JSON.parse(ev.data as string);
+						if (msg.type === "state") {
+							setGame(msg.game as Game);
+							if (msg.game.status === "finished") disconnectWS();
+						}
+					} catch {
+						/* ignore */
+					}
+				};
+
+				ws.onerror = () => setWsReady(false);
+
+				ws.onclose = () => {
+					setWsReady(false);
+					// Reconnexion automatique (si la partie est toujours active)
+					const delay =
+						RECONNECT_DELAYS[
+							Math.min(attemptRef.current, RECONNECT_DELAYS.length - 1)
+						];
+					attemptRef.current++;
+					reconnectRef.current = setTimeout(() => {
+						if (gameIdRef.current) open();
+					}, delay);
+				};
+			};
+
+			open();
 		},
-		[stopPolling],
+		[disconnectWS],
 	);
 
-	useEffect(() => () => stopPolling(), [stopPolling]);
+	// Ping keep-alive toutes les 25s pour éviter les timeouts serveur
+	useEffect(() => {
+		const id = setInterval(() => {
+			if (wsRef.current?.readyState === WebSocket.OPEN) {
+				wsRef.current.send("ping");
+			}
+		}, 25_000);
+		return () => clearInterval(id);
+	}, []);
 
-	// ── Créer une partie ──────────────────────────────────────
+	// Nettoyage au démontage
+	useEffect(() => () => disconnectWS(), [disconnectWS]);
+
+	// ── Créer une partie ─────────────────────────────────────────
+
 	const handleCreateGame = async (
 		mode: "pve" | "pvp",
 		name: string,
@@ -62,8 +126,7 @@ export default function MorpionPage() {
 			setPlayerSymbol("X");
 			setInviteUrl(res.invite_url);
 			setPhase("playing");
-
-			if (mode === "pvp") startPolling(res.game.game_id);
+			connectWS(res.game.game_id); // WS pour PvE ET PvP
 		} catch (e) {
 			setError(await extractError(e));
 		} finally {
@@ -71,7 +134,8 @@ export default function MorpionPage() {
 		}
 	};
 
-	// ── Rejoindre une partie ──────────────────────────────────
+	// ── Rejoindre une partie ─────────────────────────────────────
+
 	const handleJoinGame = async (gameId: string, name: string) => {
 		setLoading(true);
 		setError(null);
@@ -82,7 +146,7 @@ export default function MorpionPage() {
 			setPlayerSymbol("O");
 			setInviteUrl(undefined);
 			setPhase("playing");
-			startPolling(res.game.game_id);
+			connectWS(res.game.game_id);
 		} catch (e) {
 			setError(await extractError(e));
 		} finally {
@@ -90,12 +154,15 @@ export default function MorpionPage() {
 		}
 	};
 
-	// ── Jouer un coup ─────────────────────────────────────────
+	// ── Jouer un coup ────────────────────────────────────────────
+
 	const handleMove = async (row: number, col: number) => {
 		if (!game || !playerToken) return;
 		setLoading(true);
 		setError(null);
 		try {
+			// La réponse REST donne un retour immédiat ;
+			// le WS broadcast confirme (et met à jour l'adversaire en PvP)
 			const { game: updated } = await api.makeMove(
 				game.game_id,
 				playerToken,
@@ -103,7 +170,7 @@ export default function MorpionPage() {
 				col,
 			);
 			setGame(updated);
-			if (updated.status === "finished") stopPolling();
+			if (updated.status === "finished") disconnectWS();
 		} catch (e) {
 			setError(await extractError(e));
 		} finally {
@@ -111,9 +178,10 @@ export default function MorpionPage() {
 		}
 	};
 
-	// ── Reset ─────────────────────────────────────────────────
+	// ── Reset ────────────────────────────────────────────────────
+
 	const handleReset = () => {
-		stopPolling();
+		disconnectWS();
 		setPhase("setup");
 		setGame(null);
 		setPlayerToken(null);
@@ -122,22 +190,32 @@ export default function MorpionPage() {
 		setError(null);
 	};
 
-	// ── Render ────────────────────────────────────────────────
+	// ── Render ───────────────────────────────────────────────────
+
 	return (
 		<main className="min-h-screen bg-[#0a0a12] text-white flex flex-col items-center justify-center px-4 py-12">
-			{/* Header */}
 			<header className="mb-10 text-center">
 				<div className="inline-flex items-center gap-3 mb-2">
 					<h1 className="text-4xl font-black tracking-tight bg-linear-to-r from-violet-400 to-cyan-400 bg-clip-text text-transparent">
 						Scorpio AI
 					</h1>
+					{/* Indicateur connexion WS */}
+					{phase === "playing" && (
+						<span
+							title={wsReady ? "Connexion temps réel active" : "Reconnexion…"}
+							className={`w-2 h-2 rounded-full transition-colors ${
+								wsReady
+									? "bg-green-400 shadow-[0_0_6px_#4ade80]"
+									: "bg-yellow-400 animate-pulse"
+							}`}
+						/>
+					)}
 				</div>
 				<p className="text-white/30 text-sm">
 					Morpion · Joueur vs IA · Joueur vs Joueur
 				</p>
 			</header>
 
-			{/* Erreur */}
 			{error && (
 				<div className="mb-6 w-full max-w-md rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-red-400 text-sm text-center">
 					{error}
@@ -177,7 +255,6 @@ export default function MorpionPage() {
 	);
 }
 
-// ── Helpers ───────────────────────────────────────────────────
 async function extractError(e: unknown): Promise<string> {
 	if (e instanceof HTTPError) {
 		try {
