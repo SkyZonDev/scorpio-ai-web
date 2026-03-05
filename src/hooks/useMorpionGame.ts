@@ -36,7 +36,7 @@ export function useMorpionGame() {
 			gameIdRef.current = gameId;
 
 			const socket = io(WS_BASE, {
-				path: "/socket.io",
+				path: "/",
 				query: { gameId },
 				reconnection: true,
 				reconnectionAttempts: Infinity,

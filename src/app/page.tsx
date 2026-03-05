@@ -1,9 +1,12 @@
 "use client";
 
+import { Caveat } from "next/font/google";
 import GameBoard from "@/components/GameBoard";
 import GameSetup from "@/components/GameSetup";
 import GameStatus from "@/components/GameStatus";
 import { useMorpionGame } from "@/hooks/useMorpionGame";
+
+const caveat = Caveat({ subsets: ["latin"], weight: ["400", "600", "700"] });
 
 export default function MorpionPage() {
 	const {
@@ -21,31 +24,99 @@ export default function MorpionPage() {
 	} = useMorpionGame();
 
 	return (
-		<main className="min-h-screen bg-[#0a0a12] text-white flex flex-col items-center justify-center px-4 py-12">
-			<header className="mb-10 text-center">
-				<div className="inline-flex items-center gap-3 mb-2">
-					<h1 className="text-4xl font-black tracking-tight bg-linear-to-r from-violet-400 to-cyan-400 bg-clip-text text-transparent">
+		<main
+			className={caveat.className}
+			style={{
+				minHeight: "100vh",
+				display: "flex",
+				flexDirection: "column",
+				alignItems: "center",
+				justifyContent: "center",
+				padding: "48px 16px",
+				backgroundColor: "#faf7f0",
+				backgroundImage: `
+          repeating-linear-gradient(
+            transparent,
+            transparent 31px,
+            rgba(100, 120, 200, 0.12) 31px,
+            rgba(100, 120, 200, 0.12) 32px
+          )
+        `,
+				color: "#1c1917",
+				position: "relative",
+			}}
+		>
+			{/* Margin line */}
+			<div
+				aria-hidden
+				style={{
+					position: "fixed",
+					left: "72px",
+					top: 0,
+					bottom: 0,
+					width: "1px",
+					background: "rgba(200, 60, 60, 0.18)",
+					pointerEvents: "none",
+				}}
+			/>
+
+			<header style={{ marginBottom: "40px", textAlign: "center" }}>
+				<div
+					style={{ display: "inline-flex", alignItems: "center", gap: "12px" }}
+				>
+					<h1
+						style={{
+							fontSize: "clamp(48px, 8vw, 72px)",
+							fontWeight: 700,
+							lineHeight: 1,
+							color: "#1c1917",
+							letterSpacing: "-0.01em",
+						}}
+					>
 						Scorpio AI
 					</h1>
-					{/* Indicateur connexion WS */}
 					{phase === "playing" && (
 						<span
 							title={wsReady ? "Connexion temps réel active" : "Reconnexion…"}
-							className={`w-2 h-2 rounded-full transition-colors ${
-								wsReady
-									? "bg-green-400 shadow-[0_0_6px_#4ade80]"
-									: "bg-yellow-400 animate-pulse"
-							}`}
+							style={{
+								width: "10px",
+								height: "10px",
+								borderRadius: "50%",
+								border: "2px solid #1c1917",
+								background: wsReady ? "#4caf50" : "#f5a623",
+								display: "inline-block",
+								flexShrink: 0,
+								animation: wsReady ? "none" : "pulse 1s infinite",
+							}}
 						/>
 					)}
 				</div>
-				<p className="text-white/30 text-sm">
-					Morpion · Joueur vs IA · Joueur vs Joueur
+				<p
+					style={{
+						marginTop: "6px",
+						fontSize: "20px",
+						color: "#9c9086",
+						fontStyle: "italic",
+					}}
+				>
+					morpion · vs ia · vs ami
 				</p>
 			</header>
 
 			{error && (
-				<div className="mb-6 w-full max-w-md rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-red-400 text-sm text-center">
+				<div
+					style={{
+						marginBottom: "24px",
+						width: "100%",
+						maxWidth: "440px",
+						padding: "12px 16px",
+						border: "2px solid #c23b22",
+						background: "rgba(194, 59, 34, 0.06)",
+						color: "#c23b22",
+						fontSize: "18px",
+						textAlign: "center",
+					}}
+				>
 					{error}
 				</div>
 			)}
@@ -57,7 +128,15 @@ export default function MorpionPage() {
 					loading={loading}
 				/>
 			) : game ? (
-				<div className="flex flex-col items-center gap-6 w-full">
+				<div
+					style={{
+						display: "flex",
+						flexDirection: "column",
+						alignItems: "center",
+						gap: "28px",
+						width: "100%",
+					}}
+				>
 					<GameStatus
 						game={game}
 						playerSymbol={playerSymbol}
@@ -73,12 +152,28 @@ export default function MorpionPage() {
 					<button
 						type="button"
 						onClick={handleReset}
-						className="text-white/25 hover:text-white/50 text-sm transition mt-2"
+						style={{
+							background: "transparent",
+							border: "none",
+							fontSize: "18px",
+							color: "#9c9086",
+							cursor: "pointer",
+							fontFamily: "inherit",
+							textDecoration: "underline",
+							textUnderlineOffset: "3px",
+						}}
 					>
 						← Quitter la partie
 					</button>
 				</div>
 			) : null}
+
+			<style>{`
+        @keyframes pulse {
+          0%, 100% { opacity: 1; }
+          50% { opacity: 0.4; }
+        }
+      `}</style>
 		</main>
 	);
 }

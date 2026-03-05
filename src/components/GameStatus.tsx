@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import type { Game } from "@/types/game";
 
 interface Props {
@@ -16,57 +17,106 @@ export default function GameStatus({
 	onReset,
 }: Props) {
 	const { status, current_turn, winner, players, mode } = game;
+	const [copied, setCopied] = useState(false);
 
 	const xName = players.X?.name ?? "Joueur X";
 	const oName =
 		players.O?.name ?? (mode === "pve" ? "Scorpio AI" : "En attente…");
 
 	const isMyTurn = playerSymbol === current_turn;
-
 	const winnerName = winner === "X" ? xName : winner === "O" ? oName : null;
 
 	const copyInvite = () => {
-		if (inviteUrl) navigator.clipboard.writeText(inviteUrl);
+		if (inviteUrl) {
+			navigator.clipboard.writeText(inviteUrl);
+			setCopied(true);
+			setTimeout(() => setCopied(false), 2000);
+		}
 	};
 
 	return (
-		<div className="w-full max-w-sm space-y-3">
-			{/* Joueurs */}
-			<div className="grid grid-cols-2 gap-3">
+		<div
+			style={{
+				width: "100%",
+				maxWidth: "360px",
+				display: "flex",
+				flexDirection: "column",
+				gap: "12px",
+			}}
+		>
+			{/* Player cards */}
+			<div
+				style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }}
+			>
 				{(["X", "O"] as const).map((sym) => {
-					const name = sym === "X" ? xName : oName;
+					const pName = sym === "X" ? xName : oName;
 					const isActive = status === "playing" && current_turn === sym;
 					const isMe = playerSymbol === sym;
+					const isX = sym === "X";
 
 					return (
 						<div
 							key={sym}
-							className={[
-								"rounded-xl border p-3 transition-all",
-								isActive
-									? sym === "X"
-										? "border-violet-500 bg-violet-500/10 shadow-[0_0_12px_rgba(139,92,246,0.3)]"
-										: "border-cyan-500 bg-cyan-500/10 shadow-[0_0_12px_rgba(34,211,238,0.3)]"
-									: "border-white/10 bg-white/5",
-							].join(" ")}
+							style={{
+								padding: "12px 14px",
+								border: "2px solid #1c1917",
+								background: isActive ? "#1c1917" : "#faf7f0",
+								color: isActive ? "#faf7f0" : "#1c1917",
+								boxShadow: isActive ? "3px 3px 0 #7c756f" : "2px 2px 0 #c5bfb9",
+								transform: isX ? "rotate(-0.5deg)" : "rotate(0.5deg)",
+								transition: "all 0.15s",
+							}}
 						>
-							<div className="flex items-center gap-2">
+							<div
+								style={{ display: "flex", alignItems: "center", gap: "10px" }}
+							>
 								<span
-									className={`text-2xl font-black ${
-										sym === "X" ? "text-violet-400" : "text-cyan-400"
-									}`}
+									style={{
+										fontSize: "32px",
+										fontWeight: 700,
+										lineHeight: 1,
+										color: isActive ? "#faf7f0" : isX ? "#c23b22" : "#2d5a8e",
+										display: "inline-block",
+										transform: isX ? "rotate(-4deg)" : "rotate(3deg)",
+									}}
 								>
-									{sym === "X" ? "×" : "○"}
+									{isX ? "×" : "○"}
 								</span>
-								<div className="min-w-0">
-									<p className="text-white font-semibold text-sm truncate">
-										{name}
+								<div style={{ minWidth: 0 }}>
+									<p
+										style={{
+											fontSize: "20px",
+											fontWeight: 700,
+											overflow: "hidden",
+											textOverflow: "ellipsis",
+											whiteSpace: "nowrap",
+											lineHeight: 1.2,
+										}}
+									>
+										{pName}
 										{isMe && (
-											<span className="ml-1 text-xs text-white/30">(vous)</span>
+											<span
+												style={{
+													marginLeft: "6px",
+													fontSize: "14px",
+													opacity: 0.5,
+													fontWeight: 400,
+												}}
+											>
+												(vous)
+											</span>
 										)}
 									</p>
 									{isActive && (
-										<p className="text-xs text-white/40 animate-pulse">joue…</p>
+										<p
+											style={{
+												fontSize: "14px",
+												opacity: 0.7,
+												marginTop: "2px",
+											}}
+										>
+											joue…
+										</p>
 									)}
 								</div>
 							</div>
@@ -75,38 +125,77 @@ export default function GameStatus({
 				})}
 			</div>
 
-			{/* Message état */}
-			<div className="rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-center min-h-[52px] flex items-center justify-center">
+			{/* Status message */}
+			<div
+				style={{
+					padding: "14px 16px",
+					border: "2px dashed #1c1917",
+					background: "transparent",
+					textAlign: "center",
+					minHeight: "56px",
+					display: "flex",
+					alignItems: "center",
+					justifyContent: "center",
+				}}
+			>
 				{status === "waiting" && inviteUrl ? (
-					<div className="w-full space-y-2">
-						<p className="text-white/60 text-sm">
+					<div
+						style={{
+							width: "100%",
+							display: "flex",
+							flexDirection: "column",
+							gap: "8px",
+						}}
+					>
+						<p style={{ fontSize: "16px", color: "#7c756f" }}>
 							Partagez ce lien au second joueur :
 						</p>
-						<div className="flex gap-2">
+						<div style={{ display: "flex", gap: "8px" }}>
 							<input
 								readOnly
 								value={inviteUrl}
-								className="flex-1 bg-white/5 border border-white/10 rounded-lg px-3 py-1.5 text-white/70 text-xs font-mono min-w-0"
+								style={{
+									flex: 1,
+									background: "transparent",
+									border: "none",
+									borderBottom: "1px solid #1c1917",
+									padding: "4px 0",
+									fontSize: "13px",
+									fontFamily: "'Courier New', monospace",
+									color: "#1c1917",
+									outline: "none",
+									minWidth: 0,
+								}}
 							/>
 							<button
 								type="button"
 								onClick={copyInvite}
-								className="px-3 py-1.5 rounded-lg bg-violet-600 hover:bg-violet-500 text-white text-xs font-semibold transition"
+								style={{
+									padding: "4px 12px",
+									border: "2px solid #1c1917",
+									background: copied ? "#1c1917" : "transparent",
+									color: copied ? "#faf7f0" : "#1c1917",
+									fontSize: "16px",
+									fontFamily: "inherit",
+									fontWeight: 600,
+									cursor: "pointer",
+									transition: "all 0.15s",
+									whiteSpace: "nowrap",
+									flexShrink: 0,
+								}}
 							>
-								Copier
+								{copied ? "✓ Copié" : "Copier"}
 							</button>
 						</div>
 					</div>
 				) : status === "playing" ? (
-					<p className="text-white/70 text-sm">
+					<p style={{ fontSize: "20px", color: "#1c1917" }}>
 						{isMyTurn ? (
-							<span className="text-white font-semibold">
-								✨ À vous de jouer !
-							</span>
+							<span style={{ fontWeight: 700 }}>✨ À vous de jouer !</span>
 						) : (
-							<span>
+							<span style={{ color: "#7c756f" }}>
 								En attente de{" "}
-								<span className="text-white font-semibold">
+								<span style={{ color: "#1c1917", fontWeight: 700 }}>
 									{current_turn === "X" ? xName : oName}
 								</span>
 								…
@@ -114,28 +203,56 @@ export default function GameStatus({
 						)}
 					</p>
 				) : status === "finished" ? (
-					<p className="font-bold text-lg">
+					<p style={{ fontSize: "24px", fontWeight: 700 }}>
 						{winner === "Draw" ? (
-							<span className="text-white/70">🤝 Match nul !</span>
+							<span style={{ color: "#7c756f" }}>🤝 Match nul !</span>
 						) : (
-							<span className="text-yellow-300">
-								🏆 {winnerName} remporte la partie !
-							</span>
+							<span style={{ color: "#1c1917" }}>🏆 {winnerName} gagne !</span>
 						)}
 					</p>
 				) : null}
 			</div>
 
-			{/* Bouton rejouer */}
+			{/* Replay */}
 			{status === "finished" && (
-				<button
-					type="button"
-					onClick={onReset}
-					className="w-full py-3 rounded-xl font-bold text-sm bg-linear-to-r from-violet-600 to-cyan-600 text-white hover:from-violet-500 hover:to-cyan-500 active:scale-[0.98] transition-all"
-				>
-					Rejouer
-				</button>
+				<PressButton onClick={onReset}>Rejouer →</PressButton>
 			)}
 		</div>
+	);
+}
+
+function PressButton({
+	onClick,
+	children,
+}: {
+	onClick: () => void;
+	children: React.ReactNode;
+}) {
+	const [pressed, setPressed] = useState(false);
+	return (
+		<button
+			type="button"
+			onClick={onClick}
+			onMouseDown={() => setPressed(true)}
+			onMouseUp={() => setPressed(false)}
+			onMouseLeave={() => setPressed(false)}
+			style={{
+				width: "100%",
+				padding: "13px",
+				fontSize: "22px",
+				fontWeight: 700,
+				fontFamily: "inherit",
+				border: "2px solid #1c1917",
+				background: "#1c1917",
+				color: "#faf7f0",
+				cursor: "pointer",
+				boxShadow: pressed ? "1px 1px 0 #7c756f" : "4px 4px 0 #7c756f",
+				transform: pressed ? "translate(3px, 3px)" : "none",
+				transition: "box-shadow 0.08s, transform 0.08s",
+				borderRadius: "2px",
+			}}
+		>
+			{children}
+		</button>
 	);
 }
