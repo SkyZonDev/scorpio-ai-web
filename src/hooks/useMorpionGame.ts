@@ -1,12 +1,14 @@
+import type { Socket } from "node:net";
 import { HTTPError } from "ky";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { io, type Socket } from "socket.io-client";
 import { api } from "@/lib/api";
 import type { Game } from "@/types/game";
 
 type Phase = "setup" | "playing";
 
-const WS_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+const WS_BASE = (
+	process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000"
+).replace(/^http/, "ws");
 
 export function useMorpionGame() {
 	const [phase, setPhase] = useState<Phase>("setup");
@@ -23,7 +25,7 @@ export function useMorpionGame() {
 
 	const disconnectSocket = useCallback(() => {
 		if (socketRef.current) {
-			socketRef.current.disconnect();
+			(socketRef.current as unknown as WebSocket).close();
 			socketRef.current = null;
 		}
 		setWsReady(false);
@@ -35,30 +37,35 @@ export function useMorpionGame() {
 			disconnectSocket();
 			gameIdRef.current = gameId;
 
-			const socket = io(WS_BASE, {
-				path: "/",
-				query: { gameId },
-				reconnection: true,
-				reconnectionAttempts: Infinity,
-				reconnectionDelay: 500,
-				reconnectionDelayMax: 10_000,
-			});
+			const ws = new WebSocket(`${WS_BASE}/ws/${gameId}`);
+			socketRef.current = ws as unknown as Socket;
 
-			socketRef.current = socket;
-
-			socket.on("connect", () => {
+			ws.onopen = () => {
 				setWsReady(true);
-				socket.emit("join", { gameId });
-			});
+			};
 
-			socket.on("disconnect", () => setWsReady(false));
+			ws.onclose = () => {
+				setWsReady(false);
+			};
 
-			socket.on("state", (payload: { game: Game }) => {
-				setGame(payload.game);
-				if (payload.game.status === "finished") disconnectSocket();
-			});
+			ws.onerror = () => {
+				setWsReady(false);
+			};
 
-			socket.on("connect_error", () => setWsReady(false));
+			ws.onmessage = (event) => {
+				try {
+					const payload = JSON.parse(event.data) as {
+						type: string;
+						game: Game;
+					};
+					if (payload.type === "state") {
+						setGame(payload.game);
+						if (payload.game.status === "finished") disconnectSocket();
+					}
+				} catch {
+					// message non-JSON ignoré (ex: "pong")
+				}
+			};
 		},
 		[disconnectSocket],
 	);

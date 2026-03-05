@@ -181,7 +181,7 @@ export default function GameBoard({
 					transform: "rotate(-0.3deg)",
 				}}
 			>
-				{Array.from({ length: 9 }, (i, idx) => {
+				{Array.from({ length: 9 }, (_, idx) => {
 					const raw = board[idx] ?? " ";
 					const value = raw.trim() || " ";
 					const isEmpty = value === " ";
@@ -192,7 +192,8 @@ export default function GameBoard({
 
 					return (
 						<Cell
-							key={`cell-${i}`}
+							// biome-ignore lint: index
+							key={idx}
 							idx={idx}
 							value={value}
 							isWin={isWin}
